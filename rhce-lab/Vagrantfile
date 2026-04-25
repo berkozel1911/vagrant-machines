@@ -1,0 +1,42 @@
+Vagrant.configure("2") do |config|
+  # Rocky Linux 9 (LVM'siz ve stabil yapı için generic box idealdir)
+  config.vm.box = "generic/rocky9"
+
+  # Kendi public key'ini makinelere ekle
+  # .ssh altındaki id_ed25519.pub dosyasını okur
+  begin
+    ssh_pub_key = File.read("#{Dir.home}/.ssh/id_ed25519.pub").strip
+    config.vm.provision "shell", inline: <<-SHELL
+      mkdir -p /home/vagrant/.ssh
+      echo "#{ssh_pub_key}" >> /home/vagrant/.ssh/authorized_keys
+      chown -R vagrant:vagrant /home/vagrant/.ssh
+      chmod 700 /home/vagrant/.ssh
+      chmod 600 /home/vagrant/.ssh/authorized_keys
+    SHELL
+  rescue Errno::ENOENT
+    puts "UYARI: .ssh/id_ed25519.pub bulunamadı, anahtar eklenemedi."
+  end
+
+  # 3 Adet Makine Tanımlaması (rhce-0, rhce-1, rhce-2)
+  (0..2).each do |i|
+    config.vm.define "rhce-#{i}" do |node|
+      node.vm.hostname = "rhce-#{i}"
+      
+      # IP Adresleri: 192.168.100.10, 11, 12
+      node.vm.network "private_network", ip: "192.168.100.#{10 + i}"
+
+      node.vm.provider :libvirt do |lv|
+        lv.memory = 2048
+        lv.cpus = 1
+        lv.cpu_mode = "host-passthrough"
+        
+        # Donanım Modernizasyonu
+        # lv.machine_type = "q35"
+        # lv.loader = "/usr/share/edk2/ovmf/OVMF_CODE.fd"
+        
+        # Disk Kapasitesi
+        lv.machine_virtual_size = 20
+      end
+    end
+  end
+end
